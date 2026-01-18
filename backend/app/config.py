@@ -1,36 +1,31 @@
 from pydantic_settings import BaseSettings
 from typing import List, Optional
-from urllib.parse import quote_plus, urlparse, urlunparse
-import re
+from urllib.parse import quote_plus
 import os
 
 
 class Settings(BaseSettings):
-    # MongoDB - can use full URL or separate credentials
+    # MongoDB - use MONGODB_URL environment variable for production
     mongodb_url: Optional[str] = None
-    mongodb_host: str = "cluster0.xsx8m4x.mongodb.net"
-    mongodb_username: str = "sharmapriyanshi178"
-    mongodb_password: str = "@Ps8700067157"
+    mongodb_host: str = ""
+    mongodb_username: str = ""
+    mongodb_password: str = ""
     database_name: str = "chatbot_platform"
     
     @property
     def mongo_connection_string(self) -> str:
         """Build MongoDB connection string with properly encoded credentials."""
         if self.mongodb_url:
-            # Parse and re-encode the URL to handle special characters
             return self._encode_mongodb_url(self.mongodb_url)
         
-        # URL-encode the password to handle special characters like @
+        if not all([self.mongodb_username, self.mongodb_password, self.mongodb_host]):
+            raise ValueError("MongoDB credentials not configured. Set MONGODB_URL or individual credentials.")
+        
         encoded_password = quote_plus(self.mongodb_password)
         return f"mongodb+srv://{self.mongodb_username}:{encoded_password}@{self.mongodb_host}/?appName=Cluster0"
     
     def _encode_mongodb_url(self, url: str) -> str:
         """Parse MongoDB URL and properly encode credentials."""
-        # Match mongodb:// or mongodb+srv:// URLs
-        # Pattern: mongodb+srv://username:password@host/...
-        # The password can contain @ so we need to find the LAST @ before the host
-        
-        # Check for mongodb:// or mongodb+srv://
         if url.startswith('mongodb+srv://'):
             scheme = 'mongodb+srv://'
             rest = url[len(scheme):]
@@ -40,26 +35,18 @@ class Settings(BaseSettings):
         else:
             return url
         
-        # Find credentials - look for @ that separates credentials from host
-        # The host typically contains dots (like cluster0.abc.mongodb.net)
-        # We find the last @ before any / or ? query params
-        
-        # Split by @ to find where credentials end and host begins
         at_parts = rest.split('@')
         if len(at_parts) < 2:
-            return url  # No credentials
+            return url
         
-        # The last part is the host, everything before is username:password
         host_and_path = at_parts[-1]
-        credentials = '@'.join(at_parts[:-1])  # Rejoin in case password has @
+        credentials = '@'.join(at_parts[:-1])
         
-        # Split credentials into username and password
         if ':' in credentials:
             colon_idx = credentials.index(':')
             username = credentials[:colon_idx]
             password = credentials[colon_idx + 1:]
             
-            # URL-encode username and password
             encoded_username = quote_plus(username)
             encoded_password = quote_plus(password)
             
@@ -67,15 +54,18 @@ class Settings(BaseSettings):
         
         return url
     
-    # JWT
-    jwt_secret_key: str = "your-super-secret-jwt-key-change-in-production"
+    # JWT - MUST be set via environment variable in production
+    jwt_secret_key: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440  # 24 hours
     
     # OpenAI
     openai_api_key: str = ""
     
-    # CORS
+    # Server
+    port: int = 8000  # Render provides PORT env variable
+    
+    # CORS - add your frontend URL here
     cors_origins: str = "http://localhost:3000,http://localhost:5173,http://localhost:5174"
     
     @property
